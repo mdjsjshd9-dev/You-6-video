@@ -9,11 +9,16 @@ import asyncio, json, os, random, subprocess, sys, textwrap, time
 from pathlib import Path
 import requests
 
-VIDEOS_PER_RUN = int(os.getenv("VIDEOS_PER_RUN", "6"))
-NICHE = os.getenv("NICHE", "motivation, self improvement and healthy habits")
-VOICE = os.getenv("VOICE", "en-US-AndrewNeural")
-CAPTIONS = os.getenv("CAPTIONS", "1") == "1"
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+def env(name, default):
+    """Like os.getenv, but an empty value (unset GitHub variable) also uses the default."""
+    return (os.getenv(name) or "").strip() or default
+
+
+VIDEOS_PER_RUN = int(env("VIDEOS_PER_RUN", "6"))
+NICHE = env("NICHE", "motivation, self improvement and healthy habits")
+VOICE = env("VOICE", "en-US-AndrewNeural")
+CAPTIONS = env("CAPTIONS", "1") == "1"
+GEMINI_MODEL = env("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 PEXELS_KEY = os.getenv("PEXELS_API_KEY", "")
 PIXABAY_KEY = os.getenv("PIXABAY_API_KEY", "")  # alternative to Pexels (both optional)
