@@ -3,7 +3,7 @@ Default delivery: GitHub Release (open on phone, tap video, download -> Gallery)
 Telegram is optional (only used if its secrets are set).
 
 Pipeline per video: script (Gemini or scripts.json) -> voice (edge-tts)
--> stock clips (Pexels, optional) -> ffmpeg compose (9:16 + captions) -> Telegram.
+-> stock clips (Pexels or Pixabay, both optional) -> ffmpeg compose (9:16 + captions) -> Telegram.
 """
 import asyncio, json, os, random, subprocess, sys, textwrap, time
 from pathlib import Path
@@ -16,6 +16,7 @@ CAPTIONS = os.getenv("CAPTIONS", "1") == "1"
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
 PEXELS_KEY = os.getenv("PEXELS_API_KEY", "")
+PIXABAY_KEY = os.getenv("PIXABAY_API_KEY", "")  # alternative to Pexels (both optional)
 TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TG_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
 DRY_RUN = os.getenv("DRY_RUN", "0") == "1"  # no network: test the video builder only
@@ -112,6 +113,43 @@ def pexels_clips(keywords, k=4):
     return got
 
 
+def pixabay_clips(keywords, k=4):
+    got = []
+    for kw in (keywords or ["nature"]) * 2:
+        if len(got) >= k:
+            break
+        try:
+            r = requests.get("https://pixabay.com/api/videos/", timeout=30,
+                             params={"key": PIXABAY_KEY, "q": kw, "per_page": 20, "safesearch": "true"})
+            r.raise_for_status()
+            hits = r.json().get("hits", [])
+            random.shuffle(hits)
+            for h in hits:
+                vids = h.get("videos", {})
+                v = vids.get("medium") or vids.get("large") or vids.get("small")
+                if not v or not v.get("url"):
+                    continue
+                p = WORK / f"pix_{h['id']}.mp4"
+                if not p.exists():
+                    p.write_bytes(requests.get(v["url"], timeout=120).content)
+                if p not in got:
+                    got.append(p); break
+        except Exception as e:
+            print("pixabay skip:", kw, e)
+    return got
+
+
+def get_clips(keywords):
+    if DRY_RUN:
+        return []
+    clips = []
+    if PEXELS_KEY:
+        clips = pexels_clips(keywords)
+    if not clips and PIXABAY_KEY:
+        clips = pixabay_clips(keywords)
+    return clips
+
+
 # ---------- 4. compose ----------
 def pick_font():
     try:
@@ -194,7 +232,7 @@ def main():
             audio = WORK / f"{tag}.mp3"
             make_voice(s["voiceover"], audio)
             total = duration(audio)
-            clips = pexels_clips(s.get("keywords", [])) if (PEXELS_KEY and not DRY_RUN) else []
+            clips = get_clips(s.get("keywords", []))
             bg = build_background(clips, total, tag)
             final = OUT / f"{tag}.mp4"
             compose(bg, audio, s, final, tag)
