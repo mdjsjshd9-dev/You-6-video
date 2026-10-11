@@ -1,4 +1,35 @@
 [
-  {"title": "3 Habits That Quietly Change Your Life", "voiceover": "Here are three tiny habits that quietly change your life. One: write tomorrow's top task tonight. Two: walk ten minutes after every meal. Three: put your phone away one hour before sleep. Small steps, repeated daily, beat big plans you never start. Try one today.", "keywords": ["morning routine", "walking city", "sunset"]},
-  {"title": "Why You Feel Tired All Day", "voiceover": "Feeling tired all day? It is often not about sleep length, but sleep quality. Keep a fixed wake up time, get sunlight in the first hour, and cut caffeine after noon. Your energy follows your rhythm. Fix the rhythm, and the energy returns.", "keywords": ["sunrise", "coffee cup", "bedroom"]}
+  {"title": "Why Your Brain Loves Small Wins", "scenes": [
+    {"text": "Did you know your brain gives you a tiny reward for every *small* win?", "mood": "curious", "icon": "bulb"},
+    {"text": "It is true, and it is the secret behind every *habit* that sticks.", "mood": "excited", "icon": "star"},
+    {"text": "When you finish something easy, your brain feels *proud* and wants more.", "mood": "happy", "icon": "heart"},
+    {"text": "That is why a huge goal feels scary, but a tiny step feels *safe*.", "mood": "calm", "icon": "cloud"},
+    {"text": "So stop waiting for motivation, because motivation is *unreliable* on tired days.", "mood": "sad", "icon": "moon"},
+    {"text": "Instead, make the first step so small that it is almost *funny*.", "mood": "funny", "icon": "coin"},
+    {"text": "Read one page, do one pushup, or write one single *sentence*.", "mood": "happy", "icon": "sun"},
+    {"text": "Then watch how fast your *energy* starts to rise!", "mood": "excited", "icon": "rocket"},
+    {"text": "Tomorrow, repeat it, and soon those small wins become a *big* life change.", "mood": "surprised", "icon": "star"}
+  ]},
+  {"title": "3 Reasons You Feel Tired All Day", "scenes": [
+    {"text": "Do you wake up tired even after a *full* night of sleep?", "mood": "curious", "icon": "moon"},
+    {"text": "The problem may not be how *long* you sleep, but how well.", "mood": "calm", "icon": "cloud"},
+    {"text": "Reason one: your phone *light* keeps your brain awake at night.", "mood": "surprised", "icon": "bulb"},
+    {"text": "Put it away one hour before bed, and your sleep gets *deeper*.", "mood": "happy", "icon": "heart"},
+    {"text": "Reason two: you skip *sunlight* in the morning.", "mood": "sad", "icon": "sun"},
+    {"text": "Ten minutes of morning light tells your body that the *day* has started.", "mood": "excited", "icon": "sun"},
+    {"text": "Reason three: too much *caffeine* late in the afternoon.", "mood": "funny", "icon": "coin"},
+    {"text": "Try stopping coffee after noon and see how you *feel*.", "mood": "curious", "icon": "star"},
+    {"text": "Fix these three things, and your *energy* will thank you!", "mood": "excited", "icon": "rocket"}
+  ]},
+  {"title": "The Two Minute Rule That Beats Laziness", "scenes": [
+    {"text": "Here is a *simple* trick that beats laziness every single time.", "mood": "excited", "icon": "bulb"},
+    {"text": "It is called the *two minute* rule.", "mood": "curious", "icon": "star"},
+    {"text": "Whatever you want to do, just do it for only *two* minutes.", "mood": "happy", "icon": "sun"},
+    {"text": "Want to study? Open the book for two *minutes*.", "mood": "calm", "icon": "cloud"},
+    {"text": "Want to exercise? Put on your shoes and move for two *minutes*.", "mood": "funny", "icon": "rocket"},
+    {"text": "The hardest part is always the *start*, never the work itself.", "mood": "sad", "icon": "moon"},
+    {"text": "Once you begin, your brain usually says, why not *continue*?", "mood": "surprised", "icon": "heart"},
+    {"text": "And if you stop after two minutes, that is still a *win*.", "mood": "happy", "icon": "coin"},
+    {"text": "Try it today, and *share* it with a friend who needs it!", "mood": "excited", "icon": "star"}
+  ]}
 ]

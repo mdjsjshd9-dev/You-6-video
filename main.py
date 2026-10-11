@@ -1,15 +1,18 @@
-"""Daily Video Bot: makes N vertical videos every day.
+"""Daily Cartoon Video Bot: makes N colourful animated cartoon videos (30+ sec) every day.
 Default delivery: GitHub Release (open on phone, tap video, download -> Gallery).
 Telegram is optional (only used if its secrets are set).
 
-Pipeline per video: script (Gemini or scripts.json) -> voice (edge-tts)
--> stock clips (Pexels or Pixabay, both optional) -> ffmpeg compose (9:16 + captions) -> Telegram.
+Pipeline per video: script with scenes+moods (Gemini or scripts.json) -> voice with
+word timings (edge-tts) -> cartoon animation + kinetic captions (cartoon.py) -> mp4.
 """
-import asyncio, json, os, random, subprocess, sys, textwrap, time
+import asyncio, json, os, random, re, subprocess, sys, time
 from pathlib import Path
 import requests
 
-def env(name, default):
+import cartoon
+
+
+def env(name, default=""):
     """Like os.getenv, but an empty value (unset GitHub variable) also uses the default."""
     return (os.getenv(name) or "").strip() or default
 
@@ -19,14 +22,12 @@ NICHE = env("NICHE", "motivation, self improvement and healthy habits")
 VOICE = env("VOICE", "en-US-AndrewNeural")
 CAPTIONS = env("CAPTIONS", "1") == "1"
 GEMINI_MODEL = env("GEMINI_MODEL", "gemini-2.5-flash")
-GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
-PEXELS_KEY = os.getenv("PEXELS_API_KEY", "")
-PIXABAY_KEY = os.getenv("PIXABAY_API_KEY", "")  # alternative to Pexels (both optional)
-TG_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TG_CHAT = os.getenv("TELEGRAM_CHAT_ID", "")
-DRY_RUN = os.getenv("DRY_RUN", "0") == "1"  # no network: test the video builder only
+GEMINI_KEY = env("GEMINI_API_KEY")
+TG_TOKEN = env("TELEGRAM_BOT_TOKEN")
+TG_CHAT = env("TELEGRAM_CHAT_ID")
+DRY_RUN = env("DRY_RUN", "0") == "1"  # no network: test the animation only
+MIN_SECONDS = 30.5
 
-W, H, FPS = 1080, 1920, 30
 WORK, OUT = Path("work"), Path("out")
 WORK.mkdir(exist_ok=True); OUT.mkdir(exist_ok=True)
 
@@ -44,184 +45,132 @@ def duration(path):
 
 
 # ---------- 1. scripts ----------
+def clean_script(d):
+    scenes = []
+    for s in d.get("scenes", []):
+        text = str(s.get("text", "")).strip()
+        if not text:
+            continue
+        mood = str(s.get("mood", "happy")).lower()
+        icon = str(s.get("icon", "")).lower()
+        scenes.append({"text": text,
+                       "mood": mood if mood in cartoon.MOODS else "happy",
+                       "icon": icon if icon in cartoon.ICONS else random.choice(cartoon.ICONS)})
+    words = sum(len(s["text"].split()) for s in scenes)
+    if len(scenes) < 4 or words < 60:
+        return None
+    return {"title": str(d.get("title", "Video"))[:90], "scenes": scenes}
+
+
 def gemini_scripts(n):
     prompt = (
-        f"Write {n} different short-video scripts for the niche: {NICHE}. "
-        "Each voiceover must be 70-110 words, a strong hook in the first sentence, "
-        "plain spoken language, no emojis, no hashtags, no made-up statistics. "
-        'Return ONLY a JSON array of objects with keys: "title" (max 70 chars), '
-        '"voiceover", "keywords" (3 simple visual search words in English).'
+        f"Write {n} different short cartoon-video scripts for the niche: {NICHE}. "
+        "Each script has 8 to 10 scenes. Each scene is ONE spoken sentence of 10 to 16 words "
+        "(100 to 130 words per script in total). Scene 1 is a strong curious hook. Use simple "
+        "spoken language, a friendly tone, no emojis, no hashtags, no invented statistics. "
+        "Wrap 1 or 2 important words per scene in asterisks like *this*. "
+        "Give each scene a mood from: happy, excited, curious, surprised, sad, calm, funny "
+        "(vary them to match the meaning) and an icon from: heart, star, sun, moon, bulb, rocket, cloud, coin. "
+        'Return ONLY a JSON array. Each item: {"title": "max 70 chars", "scenes": '
+        '[{"text": "...", "mood": "...", "icon": "..."}]}.'
     )
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
-    r = requests.post(url, params={"key": GEMINI_KEY}, timeout=90, json={
+    r = requests.post(url, params={"key": GEMINI_KEY}, timeout=120, json={
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"responseMimeType": "application/json", "temperature": 1.0}})
+        "generationConfig": {"responseMimeType": "application/json", "temperature": 1.0,
+                             "maxOutputTokens": 8192}})
     r.raise_for_status()
     text = r.json()["candidates"][0]["content"]["parts"][0]["text"]
     data = json.loads(text.replace("```json", "").replace("```", "").strip())
-    return [d for d in data if d.get("voiceover")][:n]
+    return [x for x in (clean_script(d) for d in data) if x][:n]
 
 
 def get_scripts(n):
+    out = []
     if GEMINI_KEY and not DRY_RUN:
         try:
-            s = gemini_scripts(n)
-            if s:
-                print(f"Gemini gave {len(s)} scripts"); return s
+            out = gemini_scripts(n)
+            print(f"Gemini gave {len(out)} scripts")
         except Exception as e:
             print("Gemini failed, using scripts.json:", e)
-    pool = json.loads(Path("scripts.json").read_text(encoding="utf-8"))
-    random.shuffle(pool)
-    return [pool[i % len(pool)] for i in range(n)]
+    if len(out) < n:
+        pool = [x for x in (clean_script(d) for d in
+                            json.loads(Path("scripts.json").read_text(encoding="utf-8"))) if x]
+        random.shuffle(pool)
+        while len(out) < n:
+            out.append(pool[len(out) % len(pool)])
+    return out[:n]
 
 
-# ---------- 2. voice ----------
-async def _tts(text, path):
+# ---------- 2. voice + word timings ----------
+async def _tts(text, path, rate):
     import edge_tts
-    await edge_tts.Communicate(text, VOICE).save(str(path))
+    try:
+        comm = edge_tts.Communicate(text, VOICE, rate=rate, boundary="WordBoundary")
+    except TypeError:
+        comm = edge_tts.Communicate(text, VOICE, rate=rate)
+    events = []
+    with open(path, "wb") as f:
+        async for ch in comm.stream():
+            if ch["type"] == "audio":
+                f.write(ch["data"])
+            elif ch["type"] == "WordBoundary":
+                events.append((ch["offset"] / 1e7, ch["duration"] / 1e7))
+    return events
 
 
 def make_voice(text, path):
-    if DRY_RUN:  # silent audio of a plausible length
-        secs = max(8, len(text.split()) / 2.5)
-        run(["ffmpeg", "-y", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
-             "-t", f"{secs:.1f}", "-c:a", "libmp3lame", str(path)])
-        return
-    asyncio.run(_tts(text, path))
-
-
-# ---------- 3. background clips ----------
-def pexels_clips(keywords, k=4):
-    got = []
-    hdr = {"Authorization": PEXELS_KEY}
-    for kw in (keywords or ["nature"]) * 2:
-        if len(got) >= k:
-            break
-        try:
-            r = requests.get("https://api.pexels.com/videos/search", headers=hdr, timeout=30,
-                             params={"query": kw, "orientation": "portrait", "per_page": 8})
-            r.raise_for_status()
-            vids = r.json().get("videos", [])
-            random.shuffle(vids)
-            for v in vids:
-                files = [f for f in v["video_files"] if f.get("height", 0) >= 1080]
-                files.sort(key=lambda f: f["height"])
-                if not files:
-                    continue
-                p = WORK / f"clip_{v['id']}.mp4"
-                if not p.exists():
-                    p.write_bytes(requests.get(files[0]["link"], timeout=120).content)
-                if p not in got:
-                    got.append(p); break
-        except Exception as e:
-            print("pexels skip:", kw, e)
-    return got
-
-
-def pixabay_clips(keywords, k=4):
-    got = []
-    for kw in (keywords or ["nature"]) * 2:
-        if len(got) >= k:
-            break
-        try:
-            r = requests.get("https://pixabay.com/api/videos/", timeout=30,
-                             params={"key": PIXABAY_KEY, "q": kw, "per_page": 20, "safesearch": "true"})
-            r.raise_for_status()
-            hits = r.json().get("hits", [])
-            random.shuffle(hits)
-            for h in hits:
-                vids = h.get("videos", {})
-                v = vids.get("medium") or vids.get("large") or vids.get("small")
-                if not v or not v.get("url"):
-                    continue
-                p = WORK / f"pix_{h['id']}.mp4"
-                if not p.exists():
-                    p.write_bytes(requests.get(v["url"], timeout=120).content)
-                if p not in got:
-                    got.append(p); break
-        except Exception as e:
-            print("pixabay skip:", kw, e)
-    return got
-
-
-def get_clips(keywords):
+    """Returns (audio_seconds, word_events). Slows the voice a little if it is under ~31s."""
     if DRY_RUN:
-        return []
-    clips = []
-    if PEXELS_KEY:
-        clips = pexels_clips(keywords)
-    if not clips and PIXABAY_KEY:
-        clips = pixabay_clips(keywords)
-    return clips
+        secs = max(31.0, len(text.split()) / 2.4)
+        run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono",
+             "-t", f"{secs:.1f}", "-c:a", "libmp3lame", str(path)])
+        return duration(path), []
+    ev = asyncio.run(_tts(text, path, "+0%"))
+    d = duration(path)
+    if d < 31:
+        pct = min(30, int((1 - d / 32.5) * 100) + 1)
+        ev = asyncio.run(_tts(text, path, f"-{pct}%"))
+        d = duration(path)
+    return d, ev
 
 
-# ---------- 4. compose ----------
-def pick_font():
-    try:
-        f = run(["fc-match", "-f", "%{file}", "DejaVu Sans:bold"]).strip()
-        if f and Path(f).exists():
-            return f
-    except Exception:
-        pass
-    return "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+def build_words(script, audio_dur, events):
+    words = []
+    for si, sc in enumerate(script["scenes"]):
+        for tok in sc["text"].split():
+            clean = tok.replace("*", "").strip()
+            if clean:
+                words.append({"w": clean, "emph": "*" in tok, "scene": si})
+    n = len(words)
+    if events:
+        m = len(events)
+        for i, w in enumerate(words):
+            st, du = events[min(m - 1, int(i * m / n))]
+            w["start"], w["dur"] = st, du
+    else:  # estimate from word lengths
+        lead, tail = 0.25, 0.3
+        weights = [len(w["w"]) + 2 for w in words]
+        total_w, acc = sum(weights), 0
+        span = max(1.0, audio_dur - lead - tail)
+        for w, wt in zip(words, weights):
+            w["start"] = lead + span * acc / total_w
+            acc += wt
+            w["dur"] = span * wt / total_w
+    for i, w in enumerate(words):
+        nxt = words[i + 1]["start"] if i + 1 < n else audio_dur
+        w["end"] = max(w["start"] + 0.08, min(w["start"] + w["dur"], nxt))
+    return words
 
 
-def build_background(clips, total, tag):
-    segs = []
-    vf = (f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
-          f"fps={FPS},format=yuv420p")
-    if not clips:  # solid colour fallback so you still get a video
-        colour = random.choice(["0x16213e", "0x1b4332", "0x3a0ca3", "0x7f1d1d", "0x0f4c5c"])
-        p = WORK / f"{tag}_bg.mp4"
-        run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c={colour}:s={W}x{H}:r={FPS}",
-             "-t", f"{total:.2f}", "-pix_fmt", "yuv420p", "-c:v", "libx264",
-             "-preset", "veryfast", str(p)])
-        return p
-    per = total / len(clips)
-    for i, c in enumerate(clips):
-        s = WORK / f"{tag}_seg{i}.mp4"
-        run(["ffmpeg", "-y", "-stream_loop", "-1", "-i", str(c), "-t", f"{per + 0.05:.2f}",
-             "-an", "-vf", vf, "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", str(s)])
-        segs.append(s)
-    lst = WORK / f"{tag}_list.txt"
-    lst.write_text("".join(f"file '{s.resolve()}'\n" for s in segs))
-    bg = WORK / f"{tag}_bg.mp4"
-    run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(lst), "-c", "copy", str(bg)])
-    return bg
-
-
-def phrases(text, words=4):
-    w = text.split()
-    return [" ".join(w[i:i + words]) for i in range(0, len(w), words)]
-
-
-def compose(bg, audio, script, out_path, tag):
-    total = duration(audio)
-    filters = ["format=yuv420p"]
-    if CAPTIONS:
-        font, ph = pick_font(), phrases(script["voiceover"])
-        step = total / max(len(ph), 1)
-        for i, p in enumerate(ph):
-            tf = WORK / f"{tag}_cap{i}.txt"
-            tf.write_text("\n".join(textwrap.wrap(p.upper(), 18)), encoding="utf-8")
-            filters.append(
-                f"drawtext=fontfile='{font}':textfile='{tf}':fontsize=84:fontcolor=white:"
-                f"borderw=6:bordercolor=black:line_spacing=12:x=(w-text_w)/2:y=h*0.62:"
-                f"enable='between(t,{i * step:.2f},{(i + 1) * step:.2f})'")
-    run(["ffmpeg", "-y", "-i", str(bg), "-i", str(audio), "-vf", ",".join(filters),
-         "-map", "0:v", "-map", "1:a", "-t", f"{total:.2f}", "-c:v", "libx264",
-         "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k",
-         "-movflags", "+faststart", str(out_path)])
-
-
-# ---------- 5. send ----------
+# ---------- 3. send (optional) ----------
 def send_telegram(path, caption):
     if not (TG_TOKEN and TG_CHAT):
-        print("No Telegram secrets; skipping send"); return
+        return
     with open(path, "rb") as f:
         r = requests.post(f"https://api.telegram.org/bot{TG_TOKEN}/sendVideo", timeout=300,
-                          data={"chat_id": TG_CHAT, "caption": caption[:900],
-                                "supports_streaming": "true", "width": W, "height": H},
+                          data={"chat_id": TG_CHAT, "caption": caption[:900], "supports_streaming": "true",
+                                "width": cartoon.W, "height": cartoon.H},
                           files={"video": f})
     if not r.ok:
         raise RuntimeError(f"Telegram error: {r.text[:300]}")
@@ -233,21 +182,24 @@ def main():
     for i, s in enumerate(scripts, 1):
         tag = f"v{i}_{int(time.time())}"
         try:
-            print(f"[{i}/{len(scripts)}] {s.get('title', 'video')}")
+            t0 = time.time()
+            print(f"[{i}/{len(scripts)}] {s['title']}")
+            text = " ".join(w for sc in s["scenes"] for w in sc["text"].replace("*", "").split())
             audio = WORK / f"{tag}.mp3"
-            make_voice(s["voiceover"], audio)
-            total = duration(audio)
-            clips = get_clips(s.get("keywords", []))
-            bg = build_background(clips, total, tag)
+            adur, events = make_voice(text, audio)
+            words = build_words(s, adur, events)
+            total = max(adur + 1.0, MIN_SECONDS)
+            show = cartoon.Show(s["title"], s["scenes"], words, total,
+                                seed=abs(hash(s["title"] + tag)) % 10**8, caps=CAPTIONS)
             final = OUT / f"{tag}.mp4"
-            compose(bg, audio, s, final, tag)
-            send_telegram(final, s.get("title", ""))  # only if Telegram secrets exist
+            cartoon.render_video(show, audio, final, total)
+            send_telegram(final, s["title"])
             with open(OUT / "titles.txt", "a", encoding="utf-8") as tf:
-                tf.write(f"{final.name}: {s.get('title', '')}\n")
+                tf.write(f"{final.name} ({total:.0f}s): {s['title']}\n")
             sent += 1
-            print("done:", final, f"({final.stat().st_size / 1e6:.1f} MB)")
+            print(f"done: {final} {total:.0f}s {final.stat().st_size / 1e6:.1f} MB in {time.time() - t0:.0f}s")
         except Exception as e:
-            print("FAILED video", i, e)
+            print("FAILED video", i, repr(e))
     print(f"Finished: {sent}/{len(scripts)} videos")
     if sent == 0:
         sys.exit(1)

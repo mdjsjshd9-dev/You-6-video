@@ -1,40 +1,44 @@
-# Daily Video Bot (रोज़ 6 वीडियो → GitHub → Gallery)
+# Daily Cartoon Video Bot (रोज़ 6 रंगीन कार्टून वीडियो)
 
-हर दिन GitHub Actions अपने-आप 6 वर्टिकल (9:16) वीडियो बनाता है और आपकी repo में **Release** के रूप में रख देता है।
-फ़ोन में Release खोलें → वीडियो पर टैप करें → डाउनलोड → Gallery। **Telegram की ज़रूरत नहीं।** सब फ्री।
+हर दिन GitHub Actions अपने-आप 6 एनिमेटेड कार्टून वीडियो (हर एक 30+ सेकंड, 9:16) बनाता है और repo के **Releases** में रख देता है।
+फ़ोन में Release खोलें → वीडियो पर टैप करें → डाउनलोड → Gallery। सब फ्री, Telegram ज़रूरी नहीं।
+
+## वीडियो में क्या मिलता है
+- रंगीन चलता-फिरता बैकग्राउंड (किरणें, डॉट्स, पट्टियाँ, उड़ते तारे/बुलबुले)
+- एक बोलने वाला कार्टून मैस्कॉट: बोलते समय मुँह हिलता है, पलकें झपकती हैं, मूड के हिसाब से चेहरा बदलता है (खुश, उत्साहित, जिज्ञासु, हैरान, उदास, शांत, मज़ेदार)
+- हर सीन में उड़ता हुआ आइकन (दिल, तारा, सूरज, चाँद, बल्ब, रॉकेट, बादल, सिक्का)
+- सीन बदलते समय गोल वाइप ट्रांज़िशन
+- **कैप्शन हर शब्द की आवाज़ से सिंक होते हैं।** हर कैप्शन का साइज़, जगह (ऊपर/बीच/नीचे), तिरछापन, रंग और एंट्री स्टाइल (पॉप, ज़ूम, स्लाइड, गिरना, घूमना) बदलता रहता है। ज़रूरी शब्द बड़े और अलग रंग में आते हैं। उदास सीन में कैप्शन छोटे और धीमे होते हैं, उत्साहित सीन में बड़े और हिलते हुए।
 
 ## सेटअप (फ़ोन से हो जाएगा)
 
-1. **GitHub पर repo बनाएँ** (हो सके तो **Private**, ताकि आपके वीडियो सबको न दिखें) और इस ZIP की सारी फ़ाइलें अपलोड करें (`.github/workflows/daily.yml` समेत)।
+1. GitHub पर repo बनाएँ (हो सके तो **Private**) और इन फ़ाइलों को डालें: `main.py`, `cartoon.py`, `requirements.txt`, `scripts.json`, `README.md`, और वर्कफ़्लो `.github/workflows/daily.yml`।
 2. Repo → **Settings → Secrets and variables → Actions → New repository secret**:
-   - `GEMINI_API_KEY` (aistudio.google.com से फ्री; इससे रोज़ नई स्क्रिप्ट बनती हैं)
-   - `PIXABAY_API_KEY` (pixabay.com पर फ्री अकाउंट बनाकर pixabay.com/api/docs पर key दिखती है; इससे बैकग्राउंड वीडियो आते हैं)
-   - `PEXELS_API_KEY` (ऑप्शनल; Pexels अभी नई key नहीं दे रहा। दोनों हों तो पहले Pexels चलता है)
+   - `GEMINI_API_KEY` (aistudio.google.com/apikey से फ्री; इससे रोज़ नई स्क्रिप्ट बनती हैं)
+   - अब Pexels या Pixabay की key **नहीं चाहिए**।
 3. Repo → **Settings → Actions → General → Workflow permissions** में **Read and write permissions** चुनकर Save करें।
-4. **Actions** टैब → "Daily 6 videos" → **Run workflow** (टेस्ट के लिए)।
-5. 10-20 मिनट बाद repo के पेज पर दाईं ओर **Releases** में नया Release दिखेगा। उसे खोलें, नीचे **Assets** में सारे .mp4 मिलेंगे। टैप करके डाउनलोड करें।
+4. **Actions** टैब → "Daily 6 videos" → **Run workflow**।
+5. रन हरा होने पर repo पर **Releases** खोलें। **Assets** में सारे .mp4 मिलेंगे।
 
-बिना Gemini key के `scripts.json` की स्क्रिप्ट इस्तेमाल होती हैं (इसमें अपनी स्क्रिप्ट जोड़ सकते हैं)।
-बिना Pexels/Pixabay key के रंगीन बैकग्राउंड बनता है।
-सिर्फ़ आख़िरी 7 Release रखे जाते हैं, पुराने अपने-आप मिट जाते हैं।
-
-(ऑप्शनल) अगर कभी Telegram चाहिए तो `TELEGRAM_BOT_TOKEN` और `TELEGRAM_CHAT_ID` secrets जोड़ दें, वरना वह बंद रहता है।
+बिना Gemini key के `scripts.json` की 3 स्क्रिप्ट इस्तेमाल होती हैं।
 
 ## सेटिंग्स बदलना (Settings → Secrets and variables → Actions → **Variables**)
 
 | Variable | मतलब | उदाहरण |
 |---|---|---|
-| `NICHE` | वीडियो का विषय | `facts about space` |
+| `NICHE` | वीडियो का विषय | `animal facts for kids` |
 | `VIDEOS_PER_RUN` | रोज़ कितने वीडियो | `6` |
-| `VOICE` | आवाज़ | `en-US-AndrewNeural`, `en-IN-NeerjaNeural` |
+| `VOICE` | आवाज़ | `en-US-AndrewNeural`, `en-US-AnaNeural`, `en-IN-NeerjaNeural` |
+| `CAPTIONS` | कैप्शन चालू/बंद | `1` या `0` |
 
-समय बदलने के लिए `.github/workflows/daily.yml` में `cron` लाइन बदलें (समय UTC में है; 01:30 UTC = सुबह 7:00 IST)।
+समय बदलने के लिए `daily.yml` में `cron` लाइन बदलें (समय UTC में; 01:30 UTC = सुबह 7:00 IST)।
 
 ## ध्यान दें
-- हिंदी आवाज़ (`hi-IN-MadhurNeural`) चल सकती है, पर वीडियो पर हिंदी कैप्शन सही न दिखें तो Variable में `CAPTIONS` = `0` रखें।
-- Public repo में Release सबको दिखते हैं, इसलिए Private repo रखें। Private repo पर Actions की फ्री सीमा हर महीने 2000 मिनट है।
-- Pexels/Pixabay के क्लिप फ्री-लाइसेंस के हैं, फिर भी YouTube पर डालने से पहले अपनी पॉलिसी देख लें।
-- GitHub Actions फ्री प्लान में हर महीने की मिनट-सीमा होती है। 6 वीडियो रोज़ आम तौर पर उसमें आ जाते हैं, पर पहले हफ़्ते Actions टैब में टाइम चेक करें।
+- हर वीडियो बनने में लगभग 2 मिनट लगते हैं, यानी 6 वीडियो में 12-15 मिनट।
+- आवाज़ इतनी धीमी-तेज़ की जाती है कि हर वीडियो कम से कम 30 सेकंड का रहे।
+- अंग्रेज़ी स्क्रिप्ट सबसे सही चलती है। हिंदी आवाज़/स्क्रिप्ट आज़माएँ तो हो सकता है कैप्शन के अक्षर ठीक न दिखें। उस हालत में `CAPTIONS` को `0` कर दें।
+- सिर्फ़ आख़िरी 7 Release रखे जाते हैं। पसंदीदा वीडियो फ़ोन में सेव कर लें।
+- Public repo में Release सबको दिखते हैं, इसलिए Private रखना बेहतर है।
 
-## लोकल टेस्ट (बिना इंटरनेट)
-`DRY_RUN=1 python main.py`
+## लोकल टेस्ट (बिना इंटरनेट, चुप आवाज़ के साथ)
+`DRY_RUN=1 VIDEOS_PER_RUN=1 python main.py`
